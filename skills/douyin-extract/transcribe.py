@@ -75,8 +75,8 @@ def _init_worker(model_name: str):
 
 def _transcribe_one(task: tuple) -> tuple:
     """Transcribe a single chunk. Returns (idx, skipped, char_count)."""
-    idx, chunk_path, base_name, output_dir = task
-    chunk_txt = os.path.join(output_dir, f"{base_name}-{idx:04d}.txt")
+    idx, chunk_path, base_name, chunks_dir = task
+    chunk_txt = os.path.join(chunks_dir, f"{base_name}-{idx:04d}.txt")
 
     # Already done? (txt file exists and non-empty)
     if os.path.exists(chunk_txt) and os.path.getsize(chunk_txt) > 0:
@@ -154,7 +154,7 @@ def main():
     # --- Build task list ---
     tasks = []
     for idx, chunk_path in enumerate(chunk_paths):
-        tasks.append((idx, chunk_path, args.base_name, args.output_dir))
+        tasks.append((idx, chunk_path, args.base_name, tmp_dir))
 
     # --- Transcribe with parallel workers ---
     print(f"[MODEL] Loading {args.model} into {args.workers} worker(s)...")
@@ -162,8 +162,8 @@ def main():
 
     completed_count = sum(
         1 for idx in range(total)
-        if os.path.exists(os.path.join(args.output_dir, f"{args.base_name}-{idx:04d}.txt"))
-        and os.path.getsize(os.path.join(args.output_dir, f"{args.base_name}-{idx:04d}.txt")) > 0
+        if os.path.exists(os.path.join(tmp_dir, f"{args.base_name}-{idx:04d}.txt"))
+        and os.path.getsize(os.path.join(tmp_dir, f"{args.base_name}-{idx:04d}.txt")) > 0
     )
     print(f"[RESUME] {completed_count}/{total} chunks already completed")
 
@@ -178,7 +178,7 @@ def main():
 
     # --- Merge ---
     chunk_txt_paths = [
-        os.path.join(args.output_dir, f"{args.base_name}-{idx:04d}.txt")
+        os.path.join(tmp_dir, f"{args.base_name}-{idx:04d}.txt")
         for idx in range(total)
     ]
     merged_path = os.path.join(args.output_dir, f"{args.base_name}.txt")
