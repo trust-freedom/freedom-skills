@@ -87,24 +87,33 @@ def _transcribe_one(task: tuple) -> tuple:
         chunk_path,
         language="zh",
         vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=500),
+        vad_parameters=dict(min_silence_duration_ms=300),
+        initial_prompt="以下是普通话的句子，包含标点符号。请使用逗号、句号等标点。",
     )
 
-    # Group segments into paragraphs by pause duration
+    # Each segment = one line; pause >= 0.5s = blank line (paragraph break)
+    # Force a paragraph break every max_consecutive lines without one
+    max_consecutive = 8
     seg_list = list(segments)
-    paragraphs = []
-    buf = ""
+    lines = []
+    since_break = 0
     for i, seg in enumerate(seg_list):
-        buf += seg.text
-        # Check if next segment has a long pause after this one
+        text = seg.text.strip()
+        if not text:
+            continue
+        lines.append(text)
+        since_break += 1
+        do_break = False
         if i + 1 < len(seg_list):
             gap = seg_list[i + 1].start - seg.end
-            if gap >= 1.5:  # 1.5s+ pause → paragraph break
-                paragraphs.append(buf.strip())
-                buf = ""
-        else:
-            paragraphs.append(buf.strip())
-    text = "\n\n".join(p for p in paragraphs if p)
+            if gap >= 0.5:
+                do_break = True
+        if since_break >= max_consecutive:
+            do_break = True
+        if do_break:
+            lines.append("")
+            since_break = 0
+    text = "\n".join(lines)
 
     with open(chunk_txt, "w", encoding="utf-8") as f:
         f.write(text)
@@ -115,10 +124,14 @@ def _transcribe_one(task: tuple) -> tuple:
 def merge_files(chunk_txt_paths: list[str], output_path: str):
     """Merge all chunk txt files into a single file."""
     with open(output_path, "w", encoding="utf-8") as out:
+        first = True
         for p in chunk_txt_paths:
             if os.path.exists(p):
+                if not first:
+                    out.write("\n")
+                first = False
                 with open(p, "r", encoding="utf-8") as f:
-                    out.write(f.read())
+                    out.write(f.read().rstrip("\n"))
                     out.write("\n")
 
 
